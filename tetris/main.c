@@ -1,0 +1,366 @@
+/*
+ * File:   main.c
+ * Author: madrid
+ *
+ * Created on 22 de enero de 2010, 9:58
+ */
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <ncurses.h>
+#include <time.h>
+
+#define UP 1
+#define DOWN 2
+#define RIGHT 3
+#define LEFT 4
+#define ANCHOTAB 13
+#define ALTOTAB 23
+
+typedef struct {
+    int y;
+    int x;
+    int yS;
+    int xS;
+}PUNTO;
+WINDOW *create_newwin(int height, int width, int starty, int startx,char titulo[]);
+void destroy_win(WINDOW *local_win);
+
+int main(int argc, char** argv) {
+    int opcion;
+    iniciar();
+    iniciaColores();
+    do{
+        opcion=menu();
+        switch (opcion)
+        {
+            case 0:
+                break;
+            case 1:
+                erase();
+                jugar();
+                break;
+            default:
+                erase();
+                move(3,0);
+                printw("opcion no valida\n");
+        }
+    }while (opcion!=0);
+    endwin();
+    return (EXIT_SUCCESS);
+}
+
+void jugar(){
+    noecho();
+    int i,c,direccion,limD,limR,limU,limL,alto,ancho,starty1,startx1,puntuacion,fin;
+    //alto=(getmaxy(stdscr));
+    //ancho=(getmaxx(stdscr));
+    //ancho=ancho/2;
+    //printando estas variables los valores son alto=24 y ancho=40
+    //las pongo como valores absolutos para poder manejar la matriz tablero
+    alto=ALTOTAB+1;
+    ancho=ANCHOTAB+1;
+    fin=starty1=startx1=0;
+    limD=alto-2;
+    limR=ancho-2;
+    limU=limL=1;
+    int tablero[ALTOTAB][ANCHOTAB];
+    iniciaMatriz(tablero);
+    puntuacion=0;
+    PUNTO pieza1;
+    pieza1.x=limR/2;
+    pieza1.y=1;
+    pieza1.xS=pieza1.x+1;
+    pieza1.yS=pieza1.y+1;
+    c=KEY_DOWN;
+    refresh();
+    WINDOW *ventanaJugar;
+    WINDOW *ventanaPuntos;
+    WINDOW *ventanaSiguiente;
+    ventanaJugar=create_newwin(alto,ancho,starty1,startx1,"TETRIS"); //(height, width, starty, startx,titulo)
+    ventanaPuntos=create_newwin(5,15,3,50,"PUNTOS");
+    ventanaSiguiente=create_newwin(6,15,11,50,"SIGUIENTE");
+    halfdelay(3);
+    while((c=getch())!='z'){
+        attron(COLOR_PAIR(2));
+        limpiaAnterior(pieza1);
+        //refresh();
+        if (c>0){ //he pulsado una tecla
+        decideC(c,&direccion);
+        }
+        fin=decideDireccion(&direccion,&pieza1,limD,limR,limL,tablero,&puntuacion);
+        if (fin==0){
+        pintoMatriz(tablero);
+        pintoPieza(pieza1);
+        pintoPuntos(puntuacion);//hace que me salga una línea negra entre la pieza y los puntos
+        pintoSiguiente();//hace que me salga una línea negra entre la pieza y la pieza siguiente
+        refresh();
+        }else{
+            pintoFin(tablero);
+        }
+    }
+    destroy_win(ventanaJugar);
+    destroy_win(ventanaPuntos);
+    refresh();
+}
+// decide la dirección cuando pulsas los cursores
+int decideDireccion(int *pDir,PUNTO *miPieza,int down,int right,int left,int pMatriz[ALTOTAB][ANCHOTAB],int *pPuntuacion){
+    int puedo,muerto;
+    puedo=muerto=0;
+    switch (*pDir){
+    case DOWN:
+        puedo=compruebaAbajo(pMatriz,*miPieza);
+        muerto=comprueboFin(pMatriz);
+        if (((*miPieza).yS<down)&&(puedo==1)){
+            (*miPieza).y++;
+            (*miPieza).yS++;
+        }else{
+            if (muerto==0){
+                pMatriz[(*miPieza).y][(*miPieza).x]=1;
+                pMatriz[(*miPieza).y][(*miPieza).xS]=1;
+                pMatriz[(*miPieza).yS][(*miPieza).x]=1;
+                pMatriz[(*miPieza).yS][(*miPieza).xS]=1;
+                (*miPieza).x=right/2;
+                (*miPieza).y=1;
+                (*miPieza).xS=(*miPieza).x+1;
+                (*miPieza).yS=(*miPieza).y+1;
+                *pPuntuacion+=5;
+            }
+        }
+        compruebaLineas(pMatriz,pPuntuacion);
+        break;
+    case LEFT:
+        puedo=compruebaIzq(pMatriz,*miPieza);
+        muerto=comprueboFin(pMatriz);
+        if (muerto==0){
+            if (((*miPieza).x>left)&&(puedo==1)){
+                (*miPieza).x--;
+                (*miPieza).xS--;
+            }
+        }
+        *pDir=DOWN;
+        break;
+    case RIGHT:
+        puedo=compruebaDer(pMatriz,*miPieza);
+        muerto=comprueboFin(pMatriz);
+        if (muerto==0){
+            if (((*miPieza).xS<right)&&(puedo==1)){
+                (*miPieza).x++;
+                (*miPieza).xS++;
+            }
+        }
+        *pDir=DOWN;
+        break;
+    }
+    return muerto;
+}
+void decideC(int c, int *pDir){
+switch (c){
+            case KEY_DOWN:
+                *pDir=DOWN;
+                break;
+            case KEY_LEFT:
+                *pDir=LEFT;
+                break;
+            case KEY_RIGHT:
+                *pDir=RIGHT;
+                break;
+        }
+}
+int compruebaAbajo(int Matriz[ALTOTAB][ANCHOTAB],PUNTO miPieza){
+    int muevo=0;
+    if (((Matriz[(miPieza).yS+1][(miPieza).xS]==0))&&((Matriz[(miPieza).yS+1][(miPieza).x]==0))){
+            muevo=1;
+        }else{
+            muevo=0;
+        }
+    return muevo;
+}
+int compruebaIzq(int Matriz[ALTOTAB][ANCHOTAB],PUNTO miPieza){
+    int muevo=0;
+    if (((Matriz[(miPieza).y][(miPieza).x-1]==0))&&((Matriz[(miPieza).yS][(miPieza).x-1]==0))){
+            muevo=1;
+        }else{
+            muevo=0;
+        }
+    return muevo;
+}
+int compruebaDer(int Matriz[ALTOTAB][ANCHOTAB],PUNTO miPieza){
+    int muevo=0;
+    if (((Matriz[(miPieza).y][(miPieza).xS+1]==0))&&((Matriz[(miPieza).yS][(miPieza).xS+1]==0))){
+            muevo=1;
+        }else{
+            muevo=0;
+        }
+    return muevo;
+}
+int comprueboFin(int Matriz[ALTOTAB][ANCHOTAB]){
+    int i,tope=0;
+    for (i=0;i<ANCHOTAB;i++){
+        if (Matriz[1][i] == 1){
+            tope=1;
+            break;
+        }
+    }
+    return tope;
+}
+void pintoFin (int pMatriz[ALTOTAB][ANCHOTAB]){
+    int i,j;
+    for (i=1; i<ALTOTAB;i++){
+        for (j=1; j<ANCHOTAB;j++){
+            attron(COLOR_PAIR(1));//antes 1
+            move(i,j);
+            printw ("-");
+        }
+    }
+    move(10,5);
+    printw ("FIN");
+    move(12,2);
+    printw ("HAS MUERTO");
+    move(14,2);
+    printw ("(pulsa Z)");
+}
+void compruebaLineas (int Matriz[ALTOTAB][ANCHOTAB],int *pPuntitos){
+//x=1-38 //y=1-22
+int i,j,completa;
+    completa=1;
+    for (i=ALTOTAB-1; i>0;i--){
+        completa=1;
+        for (j=ANCHOTAB-1; j>0;j--){
+            if (Matriz[i][j] == 0){
+                completa=0;
+                break;
+            }
+        }
+        if(completa==1){
+            borraLinea(Matriz,i);
+            i++;
+            *pPuntitos+=30;
+        }
+    }
+}
+void borraLinea (int Matriz[ALTOTAB][ANCHOTAB],int linea){
+    int i,j;
+    for (i=linea; i>0;i--){
+        for (j=1; j<ANCHOTAB;j++){
+            Matriz[i][j]=Matriz[i-1][j];
+        }
+    }
+    for (j=1; j<ANCHOTAB;j++){
+        Matriz[ANCHOTAB-1][j]=0;
+    }
+}
+void pintoMatriz (int pMatriz[ALTOTAB][ANCHOTAB]){
+    int i,j;
+    for (i=1; i<ALTOTAB;i++){
+        for (j=1; j<ANCHOTAB;j++){
+            if (pMatriz[i][j]==1){
+                attron(COLOR_PAIR(5));//antes 1
+                move(i,j);
+                printw ("@");
+            }else{
+                attron(COLOR_PAIR(2));
+                move(i,j);
+                printw (" ");
+            }
+        }
+    }
+}
+void iniciaMatriz (int pMatriz[ALTOTAB][ANCHOTAB]){
+    int i,j;
+    for (i=0; i<ALTOTAB;i++){
+        for (j=0; j<ANCHOTAB;j++){
+            pMatriz[i][j]=0;
+        }
+    }
+}
+void pintoPuntos(int score){
+    move (5,52);
+    attron(COLOR_PAIR(1));
+    printw ("%d",score);
+}
+void pintoSiguiente(){//(height, width, starty, startx,titulo)ventanaSiguiente=create_newwin(6,15,11,50,"SIGUIENTE");
+    attron(COLOR_PAIR(5));
+    move (13,57);
+    printw ("@");
+    move (14,57);
+    printw ("@");
+    move (13,58);
+    printw ("@");
+    move (14,58);
+    printw ("@");
+}
+void pintoPieza(PUNTO miPieza){
+    attron(COLOR_PAIR(5));//antes 1
+    move (miPieza.y,miPieza.x);
+    printw ("@");
+    move (miPieza.yS,miPieza.x);
+    printw ("@");
+    move (miPieza.y,miPieza.xS);
+    printw ("@");
+    move (miPieza.yS,miPieza.xS);
+    printw ("@");
+}
+void limpiaAnterior(PUNTO miPieza){
+    move (miPieza.y,miPieza.x);
+    printw (" ");
+    move (miPieza.yS,miPieza.x);
+    printw (" ");
+    move (miPieza.y,miPieza.xS);
+    printw (" ");
+    move (miPieza.yS,miPieza.xS);
+    printw (" ");
+}
+void iniciar(){
+    refresh();
+    initscr();
+    raw();
+    cbreak();
+    keypad(stdscr,TRUE);
+    noecho();
+    curs_set(0);//no mostrar el cursor
+}
+WINDOW *create_newwin(int height, int width, int starty, int startx,char titulo[]){
+        WINDOW *local_win;
+	local_win = newwin(height, width, starty, startx);
+	//establece el findo por defecto de la ventana
+	wbkgd(local_win,COLOR_PAIR(2));
+	//cambia el color a la hora de escribir
+	wattron(local_win,COLOR_PAIR(4));
+	waddstr(local_win,"Menu1");
+	box(local_win, 0 , 0);		/* 0, 0 gives default characters
+					 * for the vertical and horizontal
+					 * lines			*/
+        wprintw(local_win ,titulo);
+        wrefresh(local_win);
+
+	return local_win;
+}
+void destroy_win(WINDOW *local_win){
+	wborder(local_win, ' ', ' ', ' ',' ',' ',' ',' ',' ');
+	wrefresh(local_win);
+	delwin(local_win);
+}
+void iniciaColores(){
+   if (has_colors())
+        start_color();
+    init_pair(1, COLOR_WHITE,COLOR_BLACK);  //blanco sobre negro: menu
+    init_pair(2, COLOR_YELLOW, COLOR_BLACK); //pieza1  back de la ventana wbkgd(local_win,COLOR_PAIR(2));
+    init_pair(3, COLOR_GREEN, COLOR_YELLOW);
+    init_pair(4, COLOR_BLACK, COLOR_YELLOW);//borde ventana wattron(local_win,COLOR_PAIR(4));
+    init_pair(5, COLOR_BLACK, COLOR_GREEN);
+    //attron(COLOR_PAIR(1));
+}
+int menu(){
+    erase();
+    attron(COLOR_PAIR(1));
+    echo();
+    curs_set(0);
+    int menuNum;
+    move(0,0);
+    printw("pulsa (1) jugar al TETRIS\n");
+    printw("pulsa (0) SALIR\n");
+    printw("tu opcion: ");
+    scanw("%d",&menuNum);
+    return menuNum;
+}
